@@ -243,7 +243,7 @@ class BiMultiHeadAttention(nn.Module):
         attn_output_l = attn_output_l.reshape(bsz, src_len, self.embed_dim)
 
         attn_output_v = self.out_v_proj(attn_output_v)
-        attn_output_l = self.out_l_proj(attn_output_l)
+        attn_output_l = self.out_l_proj(attentionlayerattn_output_l)
 
         return attn_output_v, attn_output_l
 
@@ -261,7 +261,7 @@ class BiAttentionBlock(nn.Module):
         init_values=1e-4,
         cfg=None,
     ):
-        """
+        """attentionlayer
         Inputs:
             embed_dim - Dimensionality of input and attention feature vectors
             hidden_dim - Dimensionality of hidden layer in feed-forward network
@@ -282,7 +282,7 @@ class BiAttentionBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.gamma_v = nn.Parameter(init_values * torch.ones((v_dim)), requires_grad=True)
         self.gamma_l = nn.Parameter(init_values * torch.ones((l_dim)), requires_grad=True)
-
+attentionlayer
     def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):
         v = self.layer_norm_v(v)
         l = self.layer_norm_l(l)
@@ -295,3 +295,44 @@ class BiAttentionBlock(nn.Module):
         return v, l
 
     # def forward(self, v:List[torch.Tensor], l, attention_mask_v=None, attention_mask_l=None)
+
+#2.6.3
+#Gaze-Image 和 Image-gaze 交叉注意力融合模块
+class FeatureEnhancerWithGaze(nn.Module):
+    def __init__(self, d_model, nhead):
+        super(FeatureEnhancerWithGaze, self).__init__()
+        self.cross_attention_image = nn.MultiheadAttention(d_model, nhead)
+        self.cross_attention_gaze = nn.MultiheadAttention(d_model, nhead)
+        self.fc_image = nn.Linear(d_model * 2, d_model)
+        self.fc_gaze = nn.Linear(d_model * 2, d_model)
+
+    def forward(self, image_features, gaze_features):
+        # 图像特征和眼动特征交叉注意力
+        updated_image_features, _ = self.cross_attention_image(image_features, gaze_features, gaze_features)
+        updated_gaze_features, _ = self.cross_attention_gaze(gaze_features, image_features, image_features)
+
+        # 拼接图像特征和眼动特征
+        combined_features = torch.cat((updated_image_features, updated_gaze_features), dim=-1)
+
+        # 通过全连接层处理
+        enhanced_image_features = self.fc_image(combined_features)
+        enhanced_gaze_features = self.fc_gaze(combined_features)
+
+        return enhanced_image_features, enhanced_gaze_features
+
+# # 在模型中使用该模块
+# class ModifiedModel(nn.Module):
+#     def __init__(self, d_model, nhead, backbone, transformer):
+#         super(ModifiedModel, self).__init__()
+#         self.feature_enhancer_with_gaze = FeatureEnhancerWithGaze(d_model, nhead)
+#         self.backbone = backbone  # 替换为实际的backbone实现
+#         self.transformer = transformer  # 替换为实际的transformer实现
+
+#     def forward(self, image_features, gaze_features, text_dict):
+#         # 应用特征融合模块
+#         image_features, gaze_features = self.feature_enhancer_with_gaze(image_features, gaze_features)
+        
+#         # 其他前向传播步骤
+#         text_features = text_dict["bert_output"]["last_hidden_state"]
+#         transformed_features = self.transformer(image_features, text_features)
+#         return transformed_featuress
